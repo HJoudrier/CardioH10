@@ -131,6 +131,27 @@ button.danger { color: #a93226; }
 .hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
 .help { background: #fdf2f0; border: 1px solid #f0c9c3; border-radius: 8px; padding: 10px 14px; color: var(--ink); }
 .help ol { margin: 6px 0; padding-left: 20px; }
+.share-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #faf8f6;
+}
+.share-panel canvas { width: 200px; height: 200px; border-radius: 6px; background: #fff; flex: none; }
+.share-body { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.share-body input[type="text"] {
+  font: inherit; font-size: 13px; padding: 8px 10px; min-height: 40px; width: 100%;
+  border: 1px solid #cfc9c3; border-radius: 8px; background: #fff; color: var(--ink);
+}
+.share-body .hint { margin: 2px 0; }
+.share-body .row { margin-top: 6px; }
+.viewer-bar { margin-bottom: 10px; font-weight: 600; min-height: 1.4em; }
+body.viewer .owner-only { display: none !important; }
+
 .empty { color: var(--muted); margin: 6px 0; }
 
 .saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

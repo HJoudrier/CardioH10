@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Analysis, Render, Pdf, Polar, Store } = window.CardioH10;
+  const { Analysis, Render, Pdf, Polar, Store, Share } = window.CardioH10;
   const $ = (id) => document.getElementById(id);
 
   const FS = Polar.ECG_FS;
@@ -18,6 +18,9 @@
     current: null,     // tracé affiché dans le rapport
     page: 0,
     liveQueued: false,
+    share: null,       // diffuseur de partage en direct
+    viewer: null,      // spectateur (mode ?watch=)
+    wake: null,
   };
 
   /* ---------- Utilitaires ---------- */
@@ -74,12 +77,14 @@
         const lim = S.rec.limit;
         if (lim && S.rec.samples.length >= lim * FS) finishRecording();
       }
+      if (S.share) S.share.send({ t: 'ecg', s: samples });
       queueLive();
     },
     onHr({ hr, rr }) {
       S.hr = hr;
       $('hrNow').textContent = hr;
       if (S.rec) for (const v of rr) S.rec.rr.push(v);
+      if (S.share) S.share.send({ t: 'hr', hr });
     },
     onStatus(text) { setStatus(text, S.src ? (S.rec ? 'rec' : 'on') : ''); },
     onBattery(p) {
@@ -95,6 +100,7 @@
       $('hrNow').textContent = '--';
       $('battery').hidden = true;
       setStatus('Non connecté', '');
+      shareState();
       updateButtons();
       queueLive();
     },
@@ -111,6 +117,7 @@
       S.src = src; // les gestionnaires s'appuient sur S.src
       await src.connect();
       setStatus(kind === 'demo' ? 'Démonstration (signal simulé)' : 'Connecté · ' + src.name, 'on');
+      shareState();
     } catch (e) {
       try { src.disconnect(); } catch (e2) { /* ignoré */ }
       S.src = null;
@@ -416,9 +423,116 @@
     }
   }
 
+
+  /* ---------- Partage en direct ---------- */
+
+  function shareName() {
+    return $('shareName').checked ? $('patientName').value.trim() : '';
+  }
+  function shareState() {
+    if (S.share) S.share.send({ t: 'state', live: !!S.src });
+  }
+  function shareInfo() {
+    if (S.share) S.share.send({ t: 'info', name: shareName() });
+  }
+
+  async function startShare() {
+    if (S.share) return;
+    if (!Share.available()) { toast('Partage indisponible (bibliothèque non chargée).', true); return; }
+    $('btnShare').disabled = true;
+    const b = new Share.Broadcaster({
+      getInfo: () => ({ fs: FS, live: !!S.src, name: shareName() }),
+      getBuffer: () => S.live.slice(-Math.round(11 * FS)),
+      onViewers: (n) => {
+        $('shareStatus').textContent = n ? n + ' spectateur' + (n > 1 ? 's' : '') + ' connecté' + (n > 1 ? 's' : '') + '.' : 'En attente de spectateur…';
+      },
+      onError: (msg) => toast(msg, true),
+    });
+    try {
+      const id = await b.start();
+      S.share = b;
+      const url = location.origin + location.pathname + '?watch=' + id;
+      $('shareLink').value = url;
+      Share.drawQr($('qrCanvas'), url);
+      $('sharePanel').hidden = false;
+      $('shareStatus').textContent = 'En attente de spectateur…';
+      $('btnNativeShare').hidden = !navigator.share;
+      $('btnShare').hidden = true;
+      try { if (navigator.wakeLock) S.wake = await navigator.wakeLock.request('screen'); } catch (e) { /* facultatif */ }
+    } catch (e) {
+      b.stop();
+      toast(e.message, true);
+    }
+    $('btnShare').disabled = false;
+  }
+
+  function stopShare() {
+    if (S.share) S.share.stop();
+    S.share = null;
+    try { if (S.wake) S.wake.release(); } catch (e) { /* ignoré */ }
+    S.wake = null;
+    $('sharePanel').hidden = true;
+    $('btnShare').hidden = false;
+  }
+
+  async function copyLink() {
+    const url = $('shareLink').value;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Lien copié.');
+    } catch (e) {
+      $('shareLink').select();
+      toast('Sélectionnez le lien et copiez-le (Ctrl+C).');
+    }
+  }
+
+  /* ---------- Mode spectateur (?watch=…) ---------- */
+
+  function startViewer(id) {
+    document.body.classList.add('viewer');
+    $('liveTitle').textContent = 'Tracé en direct (spectateur)';
+    $('viewerBar').hidden = false;
+    $('footNote').hidden = true;
+    let live = false, name = '';
+    const info = () => {
+      $('viewerInfo').textContent = [name ? 'Patient : ' + name : '', live ? '' : 'en attente du capteur…']
+        .filter(Boolean).join(' · ');
+    };
+    S.viewer = new Share.Viewer({
+      onStatus: (text, ok) => {
+        setStatus(text, ok ? 'on' : '');
+        if (!ok) { S.live = []; $('hrNow').textContent = '--'; queueLive(); }
+      },
+      onHello: (m) => { live = !!m.live; name = String(m.name || '').slice(0, 80); S.live = []; info(); },
+      onEcg: (samples) => handlers.onEcg(samples),
+      onHr: (m) => handlers.onHr(m),
+      onState: (m) => {
+        live = !!m.live;
+        if (!live) { S.live = []; $('hrNow').textContent = '--'; queueLive(); }
+        info();
+      },
+      onInfo: (m) => { name = String(m.name || '').slice(0, 80); info(); },
+    });
+    S.viewer.connect(id);
+  }
+
   /* ---------- Initialisation ---------- */
 
   function init() {
+    const watch = new URLSearchParams(location.search).get('watch');
+    if (watch !== null) {
+      if (!Share.ID_RE.test(watch)) {
+        document.body.classList.add('viewer');
+        setStatus('Lien de partage invalide', '');
+        drawLive();
+        return;
+      }
+      window.addEventListener('resize', queueLive);
+      $('filterOn').checked = true;
+      drawLive();
+      startViewer(watch);
+      return;
+    }
     if (!Polar.supported()) {
       $('btWarn').hidden = false;
       $('btnConnect').disabled = true;
@@ -429,6 +543,14 @@
     $('btnDemo').onclick = () => startSource('demo');
     $('btnDisconnect').onclick = stopSource;
     $('btnRec').onclick = toggleRecording;
+    $('btnShare').onclick = startShare;
+    $('btnStopShare').onclick = stopShare;
+    $('btnCopy').onclick = copyLink;
+    $('btnNativeShare').onclick = () => {
+      navigator.share({ title: 'Tracé ECG en direct', url: $('shareLink').value }).catch(() => {});
+    };
+    $('shareName').onchange = shareInfo;
+    $('patientName').addEventListener('input', shareInfo);
     $('filterOn').onchange = () => {
       if (S.current) S.current._view = null;
       renderPreview();

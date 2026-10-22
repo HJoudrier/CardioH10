@@ -28,10 +28,13 @@
         <div class="hr-big" aria-live="off"><span id="hrNow">--</span><small>bpm</small></div>
       </div>
 
+      <div class="viewer-bar" id="viewerBar" hidden>
+        <span id="viewerInfo"></span>
+      </div>
       <div class="canvas-wrap"><canvas id="liveCanvas" aria-label="Tracé ECG en direct"></canvas></div>
-      <p class="hint" id="btWarn" hidden>Web Bluetooth n'est pas disponible dans ce navigateur. Utilisez Chrome ou Edge (ordinateur ou Android) en HTTPS ou sur localhost. Le mode démonstration reste utilisable.</p>
+      <p class="hint owner-only" id="btWarn" hidden>Web Bluetooth n'est pas disponible dans ce navigateur. Utilisez Chrome ou Edge (ordinateur ou Android) en HTTPS ou sur localhost. Le mode démonstration reste utilisable.</p>
 
-      <div class="hint help" id="btHelp" hidden>
+      <div class="hint help owner-only" id="btHelp" hidden>
         <strong>La connexion au capteur a échoué.</strong> Vérifiez dans l'ordre :
         <ol>
           <li>Le H10 est porté, électrodes humidifiées (sinon il peut se mettre en veille).</li>
@@ -42,13 +45,30 @@
         Le message d'erreur dans la barre d'état indique l'étape qui a échoué.
       </div>
 
-      <div class="row">
+      <div class="row owner-only">
         <button id="btnConnect" class="primary">Connecter le Polar H10</button>
         <button id="btnDemo">Mode démonstration</button>
         <button id="btnDisconnect" hidden>Déconnecter</button>
+        <button id="btnShare" class="ghost">Partager en direct (QR code)</button>
       </div>
 
-      <div class="rec-panel">
+      <div class="share-panel owner-only" id="sharePanel" hidden>
+        <canvas id="qrCanvas" width="280" height="280" aria-label="QR code du lien de partage"></canvas>
+        <div class="share-body">
+          <strong>Lien de visualisation à distance</strong>
+          <p class="hint">Envoyez ce lien ou ce QR code : la personne voit le tracé en direct dans son navigateur, sans rien installer. Gardez cette page ouverte pendant le partage.</p>
+          <input id="shareLink" type="text" readonly aria-label="Lien de partage">
+          <div class="row">
+            <button id="btnCopy">Copier le lien</button>
+            <button id="btnNativeShare" hidden>Envoyer…</button>
+            <button id="btnStopShare" class="danger">Arrêter le partage</button>
+          </div>
+          <label class="check"><input id="shareName" type="checkbox"><span>Afficher le nom du patient chez le spectateur</span></label>
+          <p class="hint" id="shareStatus">En attente de spectateur…</p>
+        </div>
+      </div>
+
+      <div class="rec-panel owner-only">
         <label class="field grow">
           <span>Nom du patient</span>
           <input id="patientName" type="text" autocomplete="off" placeholder="Nom Prénom" maxlength="80">
@@ -70,10 +90,10 @@
         </label>
         <button id="btnRec" class="rec" disabled>● Enregistrer</button>
       </div>
-      <div class="progress" id="recProgress" hidden><div id="recBar"></div><span id="recText"></span></div>
+      <div class="progress owner-only" id="recProgress" hidden><div id="recBar"></div><span id="recText"></span></div>
     </section>
 
-    <section class="card" id="reportCard" aria-labelledby="reportTitle">
+    <section class="card owner-only" id="reportCard" aria-labelledby="reportTitle">
       <div class="card-head">
         <h2 id="reportTitle">Rapport</h2>
         <div class="pager" id="pager" hidden>
@@ -104,7 +124,7 @@
       </div>
     </section>
 
-    <section class="card" aria-labelledby="savedTitle">
+    <section class="card owner-only" aria-labelledby="savedTitle">
       <div class="card-head">
         <h2 id="savedTitle">Tracés sauvegardés</h2>
         <label class="btn ghost" for="importFile">Importer JSON</label>
@@ -115,17 +135,20 @@
     </section>
   </main>
 
-  <footer class="foot">
-    CardioH10 · capteur grand public, non certifié dispositif médical. Les données restent sur cet appareil.
+  <footer class="foot" id="footNote">
+    CardioH10 · capteur grand public, non certifié dispositif médical. Les tracés restent sur cet appareil ; le partage en direct est un flux direct entre navigateurs.
   </footer>
 
   <div id="toast" role="status" aria-live="polite"></div>
 
+  <script src="vendor/peerjs.min.js"></script>
+  <script src="vendor/qrcode.js"></script>
   <script src="js/analysis.js"></script>
   <script src="js/render.js"></script>
   <script src="js/pdf.js"></script>
   <script src="js/polar.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/share.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
