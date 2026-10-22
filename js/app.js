@@ -21,6 +21,8 @@
     share: null,       // diffuseur de partage en direct
     viewer: null,      // spectateur (mode ?watch=)
     wake: null,
+    lastDraft: 0,
+    lock: null,
   };
 
   /* ---------- Utilitaires ---------- */
@@ -74,6 +76,7 @@
       if (S.rec) {
         for (let i = 0; i < samples.length; i++) S.rec.samples.push(samples[i]);
         updateProgress();
+        saveDraftIfDue();
         const lim = S.rec.limit;
         if (lim && S.rec.samples.length >= lim * FS) finishRecording();
       }
@@ -86,6 +89,15 @@
       if (S.rec) for (const v of rr) S.rec.rr.push(v);
       if (S.share) S.share.send({ t: 'hr', hr });
     },
+    onReconnecting() {
+      toast('Liaison avec le capteur perdue, reconnexion en cours…', true);
+      if (S.share) S.share.send({ t: 'state', live: false });
+    },
+    onReconnected() {
+      toast('Capteur reconnecté.');
+      setStatus('Connecté · ' + S.src.name, S.rec ? 'rec' : 'on');
+      shareState();
+    },
     onStatus(text) { setStatus(text, S.src ? (S.rec ? 'rec' : 'on') : ''); },
     onBattery(p) {
       const b = $('battery');
@@ -97,6 +109,7 @@
       if (wasRec) finishRecording('Connexion perdue : enregistrement interrompu.');
       S.src = null;
       S.hr = null;
+      updateWake();
       $('hrNow').textContent = '--';
       $('battery').hidden = true;
       setStatus('Non connecté', '');
@@ -118,6 +131,7 @@
       await src.connect();
       setStatus(kind === 'demo' ? 'Démonstration (signal simulé)' : 'Connecté · ' + src.name, 'on');
       shareState();
+      updateWake();
     } catch (e) {
       try { src.disconnect(); } catch (e2) { /* ignoré */ }
       S.src = null;
@@ -189,6 +203,7 @@
     if (!S.src) return;
     const limit = parseInt($('duration').value, 10) || 0;
     S.rec = { start: Date.now(), samples: [], rr: [], limit, source: S.src instanceof Polar.DemoSource ? 'demo' : 'H10' };
+    S.lastDraft = 0;
     try { localStorage.setItem('cardioh10.name', $('patientName').value); } catch (e) { /* ignoré */ }
     setStatus('Enregistrement en cours…', 'rec');
     $('recProgress').hidden = false;
@@ -208,6 +223,7 @@
     const r = S.rec;
     if (!r) return;
     S.rec = null;
+    Store.clearDraft().catch(() => {});
     $('recProgress').hidden = true;
     if (S.src) setStatus(S.src instanceof Polar.DemoSource ? 'Démonstration (signal simulé)' : 'Connecté · ' + S.src.name, 'on');
     updateButtons();
@@ -458,7 +474,7 @@
       $('shareStatus').textContent = 'En attente de spectateur…';
       $('btnNativeShare').hidden = !navigator.share;
       $('btnShare').hidden = true;
-      try { if (navigator.wakeLock) S.wake = await navigator.wakeLock.request('screen'); } catch (e) { /* facultatif */ }
+      updateWake();
     } catch (e) {
       b.stop();
       toast(e.message, true);
@@ -469,8 +485,7 @@
   function stopShare() {
     if (S.share) S.share.stop();
     S.share = null;
-    try { if (S.wake) S.wake.release(); } catch (e) { /* ignoré */ }
-    S.wake = null;
+    updateWake();
     $('sharePanel').hidden = true;
     $('btnShare').hidden = false;
   }
@@ -516,6 +531,70 @@
     S.viewer.connect(id);
   }
 
+
+  /* ---------- Veille de l'écran et reprise après interruption ---------- */
+
+  /**
+   * Un verrou Web Locks détenu pendant la session empêche Chrome de geler ou de décharger l'onglet
+   * quand il passe en arrière-plan : la réception Bluetooth et l'enregistrement continuent.
+   */
+  function updateLock() {
+    if (!navigator.locks) return;
+    const want = !!(S.src || S.share);
+    if (want && !S.lock) {
+      const me = (S.lock = {});
+      navigator.locks.request('cardioh10-live', () => new Promise((res) => {
+        if (S.lock === me) me.release = res; else res();
+      })).catch(() => {});
+    } else if (!want && S.lock) {
+      const me = S.lock;
+      S.lock = null;
+      if (me.release) me.release();
+    }
+  }
+
+  /** Garde l'écran allumé tant qu'un capteur est connecté ou qu'un partage est actif. */
+  async function updateWake() {
+    updateLock();
+    const want = !!(S.src || S.share) && $('keepAwake').checked;
+    try {
+      if (want && !S.wake && navigator.wakeLock && document.visibilityState === 'visible') {
+        S.wake = await navigator.wakeLock.request('screen');
+        S.wake.addEventListener('release', () => { S.wake = null; });
+      } else if (!want && S.wake) {
+        const w = S.wake;
+        S.wake = null;
+        await w.release();
+      }
+    } catch (e) { S.wake = null; /* refusé (économie d'énergie…) : facultatif */ }
+  }
+
+  /** Copie l'enregistrement en cours dans IndexedDB toutes les ~10 s. */
+  function saveDraftIfDue() {
+    const r = S.rec;
+    if (!r || r.samples.length - S.lastDraft < 10 * FS) return;
+    S.lastDraft = r.samples.length;
+    Store.saveDraft({
+      name: $('patientName').value.trim(), start: r.start, fs: FS, source: r.source,
+      samples: Int32Array.from(r.samples), rr: r.rr,
+    }).catch(() => {});
+  }
+
+  /** Au démarrage : un brouillon existe si la page a été tuée pendant un enregistrement. */
+  async function recoverDraft() {
+    let d = null;
+    try { d = await Store.loadDraft(); } catch (e) { return; }
+    if (!d) return;
+    try { await Store.clearDraft(); } catch (e) { /* ignoré */ }
+    if (!d.samples || d.samples.length < MIN_REC_SEC * d.fs) return;
+    d.rr = Array.from(d.rr || []);
+    d.id = null;
+    try { d.id = await Store.save(d); } catch (e) { /* affiché quand même */ }
+    showRecord(d);
+    refreshSaved();
+    toast('Enregistrement interrompu récupéré (' + fmtDuration(d.samples.length / d.fs) + ') et sauvegardé.');
+  }
+
   /* ---------- Initialisation ---------- */
 
   function init() {
@@ -543,6 +622,10 @@
     $('btnDemo').onclick = () => startSource('demo');
     $('btnDisconnect').onclick = stopSource;
     $('btnRec').onclick = toggleRecording;
+    $('keepAwake').onchange = updateWake;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') { updateWake(); queueLive(); }
+    });
     $('btnShare').onclick = startShare;
     $('btnStopShare').onclick = stopShare;
     $('btnCopy').onclick = copyLink;
@@ -582,6 +665,7 @@
     updateButtons();
     drawLive();
     refreshSaved();
+    recoverDraft();
   }
 
   init();

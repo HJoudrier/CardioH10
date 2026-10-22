@@ -53,9 +53,14 @@
       this.h = h;
       this.fs = ECG_FS;
       this.device = null;
-      this.lastEndMs = null;
+      this.lastEndMs = null;   // horodatage capteur du dernier échantillon reçu
+      this.lastRxWall = null;  // heure locale de réception de la dernière trame
       this.lastValue = 0;
       this.name = '';
+      this.userStop = false;
+      this.reconnecting = false;
+      this.resync = false;
+      this.notified = false;
     }
 
     async connect() {
@@ -80,7 +85,14 @@
           await sleep(1000);
         }
       }
-      this.device.addEventListener('gattserverdisconnected', () => h.onDisconnect());
+      await this._subscribe(server);
+      this.device.addEventListener('gattserverdisconnected', () => this._onLost());
+      h.onStatus('Connecté à ' + this.name);
+    }
+
+    /** Abonnements FC + ECG et démarrage du flux (après chaque connexion GATT). */
+    async _subscribe(server) {
+      const h = this.h;
       await sleep(300);
 
       try {
@@ -114,12 +126,45 @@
       // Démarrage : ECG (0x00), fréquence 130 Hz (0x0082), résolution 14 bits (0x000E)
       await step('démarrage de l\'ECG', ctrl.writeValueWithResponse(
         new Uint8Array([0x02, 0x00, 0x00, 0x01, 0x82, 0x00, 0x01, 0x01, 0x0e, 0x00])));
-      h.onStatus('Connecté à ' + this.name);
+    }
+
+    /** Liaison perdue (éloignement, veille du téléphone…) : reconnexion automatique. */
+    async _onLost() {
+      if (this.userStop || this.reconnecting) return;
+      this.reconnecting = true;
+      if (this.h.onReconnecting) this.h.onReconnecting();
+      let ok = false;
+      for (let attempt = 1; attempt <= 12 && !ok && !this.userStop; attempt++) {
+        try {
+          this.h.onStatus('Capteur perdu, reconnexion (essai ' + attempt + '/12)…');
+          const server = await withTimeout(this.device.gatt.connect(), 15000, 'reconnexion');
+          await this._subscribe(server);
+          ok = true;
+        } catch (e) {
+          try { this.device.gatt.disconnect(); } catch (e2) { /* ignoré */ }
+          await sleep(3000);
+        }
+      }
+      this.reconnecting = false;
+      if (ok) {
+        this.resync = true; // la première trame recale l'échelle de temps sur l'horloge locale
+        if (this.h.onReconnected) this.h.onReconnected();
+      } else if (!this.userStop) {
+        this._notifyDisconnect();
+      }
+    }
+
+    _notifyDisconnect() {
+      if (this.notified) return;
+      this.notified = true;
+      this.h.onDisconnect();
     }
 
     disconnect() {
+      this.userStop = true;
       try { if (this.ctrl) this.ctrl.writeValueWithResponse(new Uint8Array([0x03, 0x00])).catch(() => {}); } catch (e) { /* ignoré */ }
-      if (this.device && this.device.gatt.connected) this.device.gatt.disconnect();
+      try { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); } catch (e) { /* ignoré */ }
+      this._notifyDisconnect();
     }
 
     _onControl(dv) {
@@ -133,6 +178,7 @@
     _onData(dv) {
       if (dv.byteLength < 13 || dv.getUint8(0) !== 0x00 || dv.getUint8(9) !== 0x00) return; // ECG, trame type 0
       const dt = 1000 / this.fs;
+      const now = Date.now();
       const tsMs = Number(dv.getBigUint64(1, true)) / 1e6; // horodatage du dernier échantillon
       const samples = [];
       for (let i = 10; i + 2 < dv.byteLength; i += 3) {
@@ -141,15 +187,20 @@
         samples.push(v);
       }
       if (!samples.length) return;
-      // paquets perdus : on maintient la dernière valeur pour garder l'échelle de temps correcte
-      if (this.lastEndMs != null) {
-        const firstMs = tsMs - (samples.length - 1) * dt;
-        const gap = Math.round((firstMs - this.lastEndMs) / dt) - 1;
-        if (gap > 0 && gap <= this.fs * 5) {
-          this.h.onEcg(new Array(gap).fill(this.lastValue));
-        }
+
+      // Trou dans les données : on maintient la dernière valeur (ligne plate visible sur le tracé)
+      // pour conserver l'échelle de temps.
+      let gap = 0;
+      if (this.resync && this.lastRxWall != null) {
+        gap = Math.round((now - this.lastRxWall) / dt) - samples.length; // après reconnexion : horloge locale
+      } else if (this.lastEndMs != null) {
+        gap = Math.round((tsMs - (samples.length - 1) * dt - this.lastEndMs) / dt) - 1; // paquets perdus
       }
+      this.resync = false;
+      if (gap > 0 && gap <= this.fs * 600) this.h.onEcg(new Array(gap).fill(this.lastValue));
+
       this.lastEndMs = tsMs;
+      this.lastRxWall = now;
       this.lastValue = samples[samples.length - 1];
       this.h.onEcg(samples);
     }

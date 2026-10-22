@@ -33,6 +33,13 @@ Sans capteur, « Mode démonstration » génère un ECG simulé pour tester l'ap
 - Gardez la page du capteur ouverte et au premier plan pendant le partage.
 - Sur certains réseaux (pare-feu d'entreprise, NAT strict), la connexion directe peut être impossible : il faudrait alors ajouter un serveur TURN. Les options PeerJS (serveur de mise en relation, TURN) se règlent avec `window.CARDIOH10_PEER`, à définir avant `js/share.js`.
 
+### Veille, changement d'onglet, coupures
+
+- **Changement d'onglet / fenêtre en arrière-plan :** l'enregistrement continue (la réception Bluetooth ne dépend pas de l'affichage ; l'application garde en plus un verrou « Web Locks » pour que Chrome ne gèle pas l'onglet).
+- **Veille de l'écran :** tant qu'un capteur est connecté ou qu'un partage est actif, l'application demande à garder l'écran allumé (case « Garder l'écran allumé »). Attention : si l'écran est **verrouillé** (bouton d'alimentation) ou si le navigateur est fermé / mis en arrière-plan sur téléphone, Android peut suspendre la page et le navigateur ne garantit rien. Posez le téléphone écran allumé, branché si possible.
+- **Perte de liaison** (éloignement, parasite) : reconnexion automatique pendant ~1 minute ; l'enregistrement continue et la coupure apparaît en ligne plate sur le tracé.
+- **Page fermée ou tuée pendant un enregistrement :** une copie est enregistrée toutes les 10 s ; à la réouverture le tracé est récupéré et ajouté aux tracés sauvegardés.
+
 ### Impression à l'échelle 1:1
 
 Ouvrir le PDF, papier **A4 paysage**, échelle **100 % / Taille réelle** (surtout pas « Ajuster à la page »). Vérifier : 5 grands carreaux = 25 mm = 1 s.

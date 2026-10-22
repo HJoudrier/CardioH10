@@ -88,9 +88,14 @@
           <input id="filterOn" type="checkbox" checked>
           <span>Filtre 0,5–40 Hz</span>
         </label>
+        <label class="check">
+          <input id="keepAwake" type="checkbox" checked>
+          <span>Garder l'écran allumé</span>
+        </label>
         <button id="btnRec" class="rec" disabled>● Enregistrer</button>
       </div>
       <div class="progress owner-only" id="recProgress" hidden><div id="recBar"></div><span id="recText"></span></div>
+      <p class="hint owner-only">Pendant un enregistrement, laissez cette page ouverte et l'écran allumé : un navigateur ne peut pas enregistrer de façon fiable une fois l'écran verrouillé.</p>
     </section>
 
     <section class="card owner-only" id="reportCard" aria-labelledby="reportTitle">
