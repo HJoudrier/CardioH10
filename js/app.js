@@ -33,6 +33,7 @@
 
   function setStatus(text, mode) {
     $('statusText').textContent = text;
+    $('statusText').title = text;
     $('statusDot').className = 'dot' + (mode ? ' ' + mode : '');
   }
 
@@ -103,6 +104,7 @@
     if (S.src) return;
     const src = kind === 'demo' ? new Polar.DemoSource(handlers) : new Polar.PolarH10(handlers);
     S.live = [];
+    $('btHelp').hidden = true;
     $('btnConnect').disabled = true;
     $('btnDemo').disabled = true;
     try {
@@ -110,10 +112,17 @@
       await src.connect();
       setStatus(kind === 'demo' ? 'Démonstration (signal simulé)' : 'Connecté · ' + src.name, 'on');
     } catch (e) {
+      try { src.disconnect(); } catch (e2) { /* ignoré */ }
       S.src = null;
-      if (e && e.name === 'NotFoundError') toast('Aucun capteur sélectionné.');
-      else toast('Connexion impossible : ' + (e && e.message ? e.message : e), true);
-      setStatus('Non connecté', '');
+      if (e && e.name === 'NotFoundError') {
+        toast('Aucun capteur sélectionné.');
+        setStatus('Non connecté', '');
+      } else {
+        const msg = e && e.message ? e.message : String(e);
+        toast('Connexion impossible : ' + msg, true);
+        setStatus('Échec : ' + msg, '');
+        $('btHelp').hidden = false;
+      }
     }
     updateButtons();
   }

@@ -29,6 +29,23 @@
 
   function supported() { return !!(global.navigator && navigator.bluetooth); }
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function withTimeout(promise, ms, label) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('délai dépassé (' + label + ')')), ms);
+      promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+    });
+  }
+
+  /** Exécute une étape de connexion ; l'erreur indique l'étape en cause. */
+  function step(label, promise) {
+    return withTimeout(promise, 15000, label).catch((e) => {
+      if (e && /^délai dépassé/.test(e.message)) throw e;
+      throw new Error(label + ' : ' + (e && e.message ? e.message : e));
+    });
+  }
+
   /* ---------- Polar H10 ---------- */
 
   class PolarH10 {
@@ -50,37 +67,53 @@
         optionalServices: [UUID.hrService, UUID.battery, UUID.pmdService],
       });
       this.name = this.device.name || 'Polar H10';
+
+      // La connexion GATT échoue ou se bloque souvent au premier essai : on réessaie.
+      let server = null;
+      for (let attempt = 1; attempt <= 3 && !server; attempt++) {
+        try {
+          h.onStatus('Connexion à ' + this.name + ' (essai ' + attempt + '/3)…');
+          server = await withTimeout(this.device.gatt.connect(), 15000, 'connexion GATT');
+        } catch (e) {
+          try { this.device.gatt.disconnect(); } catch (e2) { /* ignoré */ }
+          if (attempt === 3) throw e;
+          await sleep(1000);
+        }
+      }
       this.device.addEventListener('gattserverdisconnected', () => h.onDisconnect());
-      h.onStatus('Connexion à ' + this.name + '…');
-      const server = await this.device.gatt.connect();
+      await sleep(300);
 
       try {
-        const bs = await server.getPrimaryService(UUID.battery);
+        h.onStatus('Lecture de la batterie…');
+        const bs = await withTimeout(server.getPrimaryService(UUID.battery), 5000, 'batterie');
         const bc = await bs.getCharacteristic(UUID.batteryLevel);
         h.onBattery((await bc.readValue()).getUint8(0));
       } catch (e) { /* batterie facultative */ }
 
       // Fréquence cardiaque + intervalles RR
-      const hrs = await server.getPrimaryService(UUID.hrService);
-      const hrc = await hrs.getCharacteristic(UUID.hrMeasurement);
+      h.onStatus('Activation de la fréquence cardiaque…');
+      const hrs = await step('service fréquence cardiaque', server.getPrimaryService(UUID.hrService));
+      const hrc = await step('mesure de fréquence cardiaque', hrs.getCharacteristic(UUID.hrMeasurement));
       hrc.addEventListener('characteristicvaluechanged', (ev) => this._onHr(ev.target.value));
-      await hrc.startNotifications();
+      await step('notifications fréquence cardiaque', hrc.startNotifications());
 
       // Flux ECG (service PMD de Polar)
-      const pmd = await server.getPrimaryService(UUID.pmdService);
-      const ctrl = await pmd.getCharacteristic(UUID.pmdControl);
-      const data = await pmd.getCharacteristic(UUID.pmdData);
+      h.onStatus('Activation du flux ECG…');
+      const pmd = await step('service ECG (PMD)', server.getPrimaryService(UUID.pmdService));
+      const ctrl = await step('contrôle ECG', pmd.getCharacteristic(UUID.pmdControl));
+      const data = await step('données ECG', pmd.getCharacteristic(UUID.pmdData));
       ctrl.addEventListener('characteristicvaluechanged', (ev) => this._onControl(ev.target.value));
-      await ctrl.startNotifications();
+      await step('indications du contrôle ECG', ctrl.startNotifications());
       data.addEventListener('characteristicvaluechanged', (ev) => this._onData(ev.target.value));
-      await data.startNotifications();
+      await step('notifications des données ECG', data.startNotifications());
 
       this.ctrl = ctrl;
       this.lastEndMs = null;
-      try { await ctrl.writeValueWithResponse(new Uint8Array([0x03, 0x00])); } catch (e) { /* arrêt préalable */ }
+      h.onStatus('Démarrage de l\'ECG…');
+      try { await withTimeout(ctrl.writeValueWithResponse(new Uint8Array([0x03, 0x00])), 5000, 'arrêt préalable'); } catch (e) { /* rien à arrêter */ }
       // Démarrage : ECG (0x00), fréquence 130 Hz (0x0082), résolution 14 bits (0x000E)
-      await ctrl.writeValueWithResponse(
-        new Uint8Array([0x02, 0x00, 0x00, 0x01, 0x82, 0x00, 0x01, 0x01, 0x0e, 0x00]));
+      await step('démarrage de l\'ECG', ctrl.writeValueWithResponse(
+        new Uint8Array([0x02, 0x00, 0x00, 0x01, 0x82, 0x00, 0x01, 0x01, 0x0e, 0x00])));
       h.onStatus('Connecté à ' + this.name);
     }
 

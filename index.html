@@ -31,6 +31,17 @@
       <div class="canvas-wrap"><canvas id="liveCanvas" aria-label="Tracé ECG en direct"></canvas></div>
       <p class="hint" id="btWarn" hidden>Web Bluetooth n'est pas disponible dans ce navigateur. Utilisez Chrome ou Edge (ordinateur ou Android) en HTTPS ou sur localhost. Le mode démonstration reste utilisable.</p>
 
+      <div class="hint help" id="btHelp" hidden>
+        <strong>La connexion au capteur a échoué.</strong> Vérifiez dans l'ordre :
+        <ol>
+          <li>Le H10 est porté, électrodes humidifiées (sinon il peut se mettre en veille).</li>
+          <li>Aucune autre application n'est connectée à la ceinture : Polar Beat / Flow, montre, téléphone, autre onglet. Désactivez le Bluetooth de ces appareils.</li>
+          <li>Retirez le H10 des appareils Bluetooth associés du système (Windows : Paramètres &gt; Bluetooth ; Android : Bluetooth &gt; oublier), puis réessayez.</li>
+          <li>Rechargez la page, relancez la connexion. Un redémarrage du Bluetooth de l'ordinateur règle souvent le problème.</li>
+        </ol>
+        Le message d'erreur dans la barre d'état indique l'étape qui a échoué.
+      </div>
+
       <div class="row">
         <button id="btnConnect" class="primary">Connecter le Polar H10</button>
         <button id="btnDemo">Mode démonstration</button>
