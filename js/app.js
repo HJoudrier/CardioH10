@@ -82,6 +82,7 @@
         b.total += samples.length;
         b.lastAt = Date.now();
         trimBuffer();
+        autoSaveIfDue();
         updateProgress();
         saveDraftIfDue();
       }
@@ -110,6 +111,7 @@
       b.textContent = 'Batterie ' + p + ' %';
     },
     onDisconnect() {
+      if (S.buf && S.buf.src === S.src) autoSaveIfDue(true);
       S.src = null;
       if (S.buf && S.buf.samples.length >= MIN_REC_SEC * FS) {
         toast('Capteur déconnecté. La mémoire tampon (' + fmtDuration(S.buf.samples.length / FS) +
@@ -283,6 +285,8 @@
       first: 0,      // index absolu du premier échantillon conservé
       total: 0,      // nombre d'échantillons reçus depuis la connexion
       lastAt: 0,     // heure de réception du dernier paquet
+      autoFrom: 0,   // index absolu de départ du décompte de l'enregistrement auto
+      autoId: null,  // « Sans limite » : tracé unique mis à jour par l'enregistrement auto
     };
     S.lastDraft = 0;
     updateButtons();
@@ -306,8 +310,42 @@
     $('recProgress').hidden = !b;
     if (!b) return;
     const sec = b.samples.length / FS, lim = bufLimit();
-    $('recText').textContent = 'Mémoire tampon ' + (lim ? fmtDuration(sec) + ' / ' + fmtDuration(lim) : fmtDuration(sec));
+    let text = 'Mémoire tampon ' + (lim ? fmtDuration(sec) + ' / ' + fmtDuration(lim) : fmtDuration(sec));
+    if ($('autoSave').checked && b.src === S.src) {
+      text += ' · auto dans ' + fmtDuration(Math.max(0, autoEvery() - (b.total - b.autoFrom) / FS));
+    }
+    $('recText').textContent = text;
     $('recBar').style.width = (lim ? Math.min(100, (sec / lim) * 100) : 0) + '%';
+  }
+
+  /** Intervalle de l'enregistrement auto (s) ; par défaut 30 s, ou la durée de la mémoire tampon si elle est plus courte. */
+  const defaultEvery = () => Math.min(30, bufLimit() || 30);
+  const autoEvery = () => parseInt($('autoEvery').value, 10) || defaultEvery();
+
+  function updateAutoUi() {
+    $('autoEvery').disabled = !$('autoSave').checked;
+    $('autoEvery').options[0].textContent = fmtDuration(defaultEvery()) + ' (par défaut)';
+  }
+
+  /**
+   * Enregistrement auto : sauvegarde la mémoire tampon toutes les N secondes de signal reçu
+   * (compté en échantillons, donc indépendant des minuteurs ralentis en arrière-plan).
+   * « final » : dernière sauvegarde à la déconnexion s'il reste du signal non sauvegardé.
+   */
+  function autoSaveIfDue(final) {
+    const b = S.buf;
+    if (!b || !$('autoSave').checked) return;
+    const since = b.total - b.autoFrom;
+    if (since < (final ? MIN_REC_SEC : autoEvery()) * FS) return;
+    b.autoFrom = b.total;
+    if (b.samples.length < MIN_REC_SEC * FS) return;
+    const rec = bufferRecord();
+    const single = !bufLimit(); // sans limite : chaque sauvegarde contient toute la session
+    if (single) rec.id = b.autoId;
+    Store.save(rec).then((id) => {
+      if (single) b.autoId = id;
+      refreshSaved();
+    }).catch((e) => toast('Enregistrement auto impossible : ' + (e && e.message ? e.message : e), true));
   }
 
   /** Contenu actuel de la mémoire tampon, sous forme de tracé. */
@@ -721,7 +759,19 @@
     $('btnDisconnect').onclick = stopSource;
     $('btnRec').onclick = saveBuffer;
     $('btnRecFs').onclick = saveBuffer;
-    $('duration').onchange = () => { trimBuffer(); updateProgress(); };
+    $('duration').onchange = () => {
+      trimBuffer();
+      if (S.buf) S.buf.autoId = null;
+      updateAutoUi();
+      updateProgress();
+    };
+    $('autoSave').onchange = () => {
+      if (S.buf) S.buf.autoFrom = S.buf.total; // le décompte part de maintenant
+      updateAutoUi();
+      updateProgress();
+    };
+    $('autoEvery').onchange = updateProgress;
+    updateAutoUi();
     $('keepAwake').onchange = updateWake;
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') { updateWake(); queueLive(); }

@@ -105,7 +105,7 @@ button.danger { color: #a93226; }
 }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .field.grow { flex: 1 1 220px; }
-.field input, .field select {
+.field input, .field select, .auto-rec select {
   font: inherit;
   color: var(--ink);
   padding: 8px 10px;
@@ -115,6 +115,8 @@ button.danger { color: #a93226; }
   background: #fff;
 }
 .check { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.auto-rec { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.auto-rec select:disabled { opacity: .5; }
 .check input { width: 18px; height: 18px; accent-color: var(--accent); }
 
 .progress {

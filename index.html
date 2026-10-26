@@ -91,6 +91,21 @@
             <option value="0">Sans limite</option>
           </select>
         </label>
+        <div class="auto-rec">
+          <label class="check">
+            <input id="autoSave" type="checkbox">
+            <span>Enregistrement auto toutes les</span>
+          </label>
+          <select id="autoEvery" aria-label="Intervalle de l'enregistrement automatique" disabled>
+            <option value="">30 s (par défaut)</option>
+            <option value="10">10 s</option>
+            <option value="30">30 s</option>
+            <option value="60">1 min</option>
+            <option value="120">2 min</option>
+            <option value="300">5 min</option>
+            <option value="600">10 min</option>
+          </select>
+        </div>
         <label class="check">
           <input id="filterOn" type="checkbox" checked>
           <span>Filtre 0,5–40 Hz</span>
@@ -102,7 +117,7 @@
         <button id="btnRec" class="rec" disabled>● Enregistrer</button>
       </div>
       <div class="progress owner-only" id="recProgress" hidden><div id="recBar"></div><span id="recText"></span></div>
-      <p class="hint owner-only">Dès que le capteur est connecté, la mémoire tampon se remplit et garde en continu les dernières secondes choisies. « Enregistrer » sauvegarde son contenu sans l'interrompre. Laissez cette page ouverte et l'écran allumé : un navigateur ne peut pas recevoir le signal de façon fiable une fois l'écran verrouillé.</p>
+      <p class="hint owner-only">Dès que le capteur est connecté, la mémoire tampon se remplit et garde en continu les dernières secondes choisies. « Enregistrer » sauvegarde son contenu sans l'interrompre ; l'enregistrement auto le fait à intervalle régulier. Laissez cette page ouverte et l'écran allumé : un navigateur ne peut pas recevoir le signal de façon fiable une fois l'écran verrouillé.</p>
     </section>
 
     <section class="card owner-only" id="reportCard" aria-labelledby="reportTitle">

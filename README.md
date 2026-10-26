@@ -19,6 +19,7 @@ L'application est statique, sans serveur applicatif : publiez-la telle quelle (G
 2. « Connecter le Polar H10 », choisir le capteur ; le tracé s'affiche en direct.
 3. Saisir le nom du patient et choisir la durée de la **mémoire tampon** (10 s à 5 min, ou sans limite) : dès la connexion, elle se remplit (barre de progression) puis garde en continu les dernières secondes reçues.
 4. « Enregistrer » sauvegarde le contenu de la mémoire tampon sur l'appareil **sans interrompre l'acquisition** : on peut enregistrer à nouveau à tout moment (par exemple à chaque symptôme). Le tracé s'affiche dans le rapport : « Exporter PNG », « Exporter PDF ».
+5. Facultatif : **« Enregistrement auto toutes les … »** sauvegarde la mémoire tampon à intervalle régulier (par défaut 30 s, ou la durée de la mémoire tampon si elle est plus courte : les tracés se suivent alors sans trou). La barre indique le temps restant avant la prochaine sauvegarde ; une dernière sauvegarde a lieu à la déconnexion. Avec une mémoire tampon « Sans limite », un seul tracé (toute la session) est mis à jour à chaque fois.
 
 Sans capteur, « Mode démonstration » génère un ECG simulé pour tester l'application.
 
