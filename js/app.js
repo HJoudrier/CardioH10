@@ -14,7 +14,7 @@
     src: null,         // source active (H10 ou démo)
     live: [],          // derniers échantillons bruts (µV)
     hr: null,
-    rec: null,         // enregistrement en cours
+    buf: null,         // mémoire tampon : dernières secondes reçues du capteur
     current: null,     // tracé affiché dans le rapport
     page: 0,
     liveQueued: false,
@@ -74,12 +74,16 @@
     onEcg(samples) {
       for (let i = 0; i < samples.length; i++) S.live.push(samples[i]);
       if (S.live.length > LIVE_KEEP) S.live.splice(0, S.live.length - LIVE_KEEP);
-      if (S.rec) {
-        for (let i = 0; i < samples.length; i++) S.rec.samples.push(samples[i]);
+      if (S.src) {
+        // nouvelle source : nouvelle mémoire tampon (l'ancienne reste disponible jusque-là)
+        if (!S.buf || S.buf.src !== S.src) newBuffer();
+        const b = S.buf;
+        for (let i = 0; i < samples.length; i++) b.samples.push(samples[i]);
+        b.total += samples.length;
+        b.lastAt = Date.now();
+        trimBuffer();
         updateProgress();
         saveDraftIfDue();
-        const lim = S.rec.limit;
-        if (lim && S.rec.samples.length >= lim * FS) finishRecording();
       }
       if (S.share) S.share.send({ t: 'ecg', s: samples });
       queueLive();
@@ -87,7 +91,7 @@
     onHr({ hr, rr }) {
       S.hr = hr;
       $('hrNow').textContent = hr;
-      if (S.rec) for (const v of rr) S.rec.rr.push(v);
+      if (S.buf && S.buf.src === S.src) for (const v of rr) S.buf.rr.push({ at: S.buf.total, v });
       if (S.share) S.share.send({ t: 'hr', hr });
     },
     onReconnecting() {
@@ -96,19 +100,21 @@
     },
     onReconnected() {
       toast('Capteur reconnecté.');
-      setStatus('Connecté · ' + S.src.name, S.rec ? 'rec' : 'on');
+      setStatus('Connecté · ' + S.src.name, 'on');
       shareState();
     },
-    onStatus(text) { setStatus(text, S.src ? (S.rec ? 'rec' : 'on') : ''); },
+    onStatus(text) { setStatus(text, S.src ? 'on' : ''); },
     onBattery(p) {
       const b = $('battery');
       b.hidden = false;
       b.textContent = 'Batterie ' + p + ' %';
     },
     onDisconnect() {
-      const wasRec = !!S.rec;
-      if (wasRec) finishRecording('Connexion perdue : enregistrement interrompu.');
       S.src = null;
+      if (S.buf && S.buf.samples.length >= MIN_REC_SEC * FS) {
+        toast('Capteur déconnecté. La mémoire tampon (' + fmtDuration(S.buf.samples.length / FS) +
+          ') reste disponible : « Enregistrer » pour la sauvegarder.');
+      }
       S.hr = null;
       updateWake();
       $('hrNow').textContent = '--';
@@ -161,10 +167,7 @@
     $('btnConnect').disabled = false;
     $('btnDemo').disabled = false;
     $('btnDisconnect').hidden = !on;
-    $('btnRec').disabled = !on;
-    $('btnRec').textContent = S.rec ? '■ Arrêter' : '● Enregistrer';
-    $('btnRec').classList.toggle('active', !!S.rec);
-    $('duration').disabled = !!S.rec;
+    $('btnRec').disabled = !S.buf;
   }
 
   /* ---------- Tracé en direct ---------- */
@@ -264,54 +267,82 @@
     document.addEventListener('webkitfullscreenchange', onChange);
   }
 
-  /* ---------- Enregistrement ---------- */
+  /* ---------- Mémoire tampon et enregistrement ---------- */
 
-  function toggleRecording() {
-    if (S.rec) { finishRecording(); return; }
-    if (!S.src) return;
-    const limit = parseInt($('duration').value, 10) || 0;
-    S.rec = { start: Date.now(), samples: [], rr: [], limit, source: S.src instanceof Polar.DemoSource ? 'demo' : 'H10' };
+  /** Durée choisie, en secondes (0 : sans limite, tout depuis la connexion). */
+  const bufLimit = () => parseInt($('duration').value, 10) || 0;
+
+  function newBuffer() {
+    S.buf = {
+      src: S.src,
+      source: S.src instanceof Polar.DemoSource ? 'demo' : 'H10',
+      samples: [],
+      rr: [],        // { at: index absolu de réception, v: intervalle RR en ms }
+      first: 0,      // index absolu du premier échantillon conservé
+      total: 0,      // nombre d'échantillons reçus depuis la connexion
+      lastAt: 0,     // heure de réception du dernier paquet
+    };
     S.lastDraft = 0;
-    try { localStorage.setItem('cardioh10.name', $('patientName').value); } catch (e) { /* ignoré */ }
-    setStatus('Enregistrement en cours…', 'rec');
-    $('recProgress').hidden = false;
-    updateProgress();
     updateButtons();
+  }
+
+  /** Ne garde que les dernières secondes choisies. */
+  function trimBuffer() {
+    const b = S.buf, lim = bufLimit() * FS;
+    if (!b || !lim || b.samples.length <= lim) return;
+    const drop = b.samples.length - lim;
+    b.samples.splice(0, drop);
+    b.first += drop;
+    // intervalles RR dont le battement de départ est sorti de la mémoire
+    let k = 0;
+    while (k < b.rr.length && b.rr[k].at - (b.rr[k].v * FS) / 1000 < b.first) k++;
+    if (k) b.rr.splice(0, k);
   }
 
   function updateProgress() {
-    const r = S.rec;
-    if (!r) return;
-    const sec = r.samples.length / FS;
-    $('recText').textContent = r.limit ? fmtDuration(sec) + ' / ' + fmtDuration(r.limit) : fmtDuration(sec);
-    $('recBar').style.width = (r.limit ? Math.min(100, (sec / r.limit) * 100) : 0) + '%';
+    const b = S.buf;
+    $('recProgress').hidden = !b;
+    if (!b) return;
+    const sec = b.samples.length / FS, lim = bufLimit();
+    $('recText').textContent = 'Mémoire tampon ' + (lim ? fmtDuration(sec) + ' / ' + fmtDuration(lim) : fmtDuration(sec));
+    $('recBar').style.width = (lim ? Math.min(100, (sec / lim) * 100) : 0) + '%';
   }
 
-  function finishRecording(message) {
-    const r = S.rec;
-    if (!r) return;
-    S.rec = null;
-    Store.clearDraft().catch(() => {});
-    $('recProgress').hidden = true;
-    if (S.src) setStatus(S.src instanceof Polar.DemoSource ? 'Démonstration (signal simulé)' : 'Connecté · ' + S.src.name, 'on');
-    updateButtons();
-    if (r.samples.length < MIN_REC_SEC * FS) {
-      toast('Enregistrement trop court (moins de ' + MIN_REC_SEC + ' s), ignoré.', true);
-      return;
-    }
-    const n = r.limit ? Math.min(r.samples.length, r.limit * FS) : r.samples.length;
-    const rec = {
+  /** Contenu actuel de la mémoire tampon, sous forme de tracé. */
+  function bufferRecord() {
+    const b = S.buf;
+    return {
       id: null,
       name: $('patientName').value.trim(),
-      start: r.start,
+      start: Math.round(b.lastAt - (b.samples.length / FS) * 1000),
       fs: FS,
-      source: r.source,
-      samples: Int32Array.from(r.samples.slice(0, n)),
-      rr: r.rr,
+      source: b.source,
+      samples: Int32Array.from(b.samples),
+      rr: b.rr.map((r) => r.v),
     };
+  }
+
+  /** « Enregistrer » : sauvegarde le contenu de la mémoire tampon, qui continue de se remplir. */
+  async function saveBuffer() {
+    const b = S.buf;
+    if (!b) return;
+    if (b.samples.length < MIN_REC_SEC * FS) {
+      toast('Mémoire tampon trop courte (moins de ' + MIN_REC_SEC + ' s), patientez quelques secondes.', true);
+      return;
+    }
+    try { localStorage.setItem('cardioh10.name', $('patientName').value); } catch (e) { /* ignoré */ }
+    const rec = bufferRecord();
     showRecord(rec);
-    toast(message || 'Enregistrement terminé (' + fmtDuration(n / FS) + ').', !!message);
     $('reportCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    try {
+      rec.id = await Store.save(rec);
+      toast('Enregistrement de ' + fmtDuration(rec.samples.length / FS) + ' sauvegardé.' +
+        (b.src === S.src ? ' La mémoire tampon continue de se remplir.' : ''));
+    } catch (e) {
+      toast('Sauvegarde impossible : ' + (e && e.message ? e.message : e), true);
+    }
+    if (S.current === rec) renderPreview();
+    refreshSaved();
   }
 
   /* ---------- Rapport ---------- */
@@ -637,18 +668,15 @@
     } catch (e) { S.wake = null; /* refusé (économie d'énergie…) : facultatif */ }
   }
 
-  /** Copie l'enregistrement en cours dans IndexedDB toutes les ~10 s. */
+  /** Copie la mémoire tampon dans IndexedDB toutes les ~10 s. */
   function saveDraftIfDue() {
-    const r = S.rec;
-    if (!r || r.samples.length - S.lastDraft < 10 * FS) return;
-    S.lastDraft = r.samples.length;
-    Store.saveDraft({
-      name: $('patientName').value.trim(), start: r.start, fs: FS, source: r.source,
-      samples: Int32Array.from(r.samples), rr: r.rr,
-    }).catch(() => {});
+    const b = S.buf;
+    if (!b || b.total - S.lastDraft < 10 * FS) return;
+    S.lastDraft = b.total;
+    Store.saveDraft(bufferRecord()).catch(() => {});
   }
 
-  /** Au démarrage : un brouillon existe si la page a été tuée pendant un enregistrement. */
+  /** Au démarrage : un brouillon existe si la page a été fermée ou tuée capteur connecté. */
   async function recoverDraft() {
     let d = null;
     try { d = await Store.loadDraft(); } catch (e) { return; }
@@ -657,10 +685,9 @@
     if (!d.samples || d.samples.length < MIN_REC_SEC * d.fs) return;
     d.rr = Array.from(d.rr || []);
     d.id = null;
-    try { d.id = await Store.save(d); } catch (e) { /* affiché quand même */ }
     showRecord(d);
-    refreshSaved();
-    toast('Enregistrement interrompu récupéré (' + fmtDuration(d.samples.length / d.fs) + ') et sauvegardé.');
+    toast('Mémoire tampon de la session précédente récupérée (' + fmtDuration(d.samples.length / d.fs) +
+      ') : « Sauvegarder » pour la conserver.');
   }
 
   /* ---------- Initialisation ---------- */
@@ -690,7 +717,8 @@
     $('btnConnect').onclick = () => startSource('h10');
     $('btnDemo').onclick = () => startSource('demo');
     $('btnDisconnect').onclick = stopSource;
-    $('btnRec').onclick = toggleRecording;
+    $('btnRec').onclick = saveBuffer;
+    $('duration').onchange = () => { trimBuffer(); updateProgress(); };
     $('keepAwake').onchange = updateWake;
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') { updateWake(); queueLive(); }

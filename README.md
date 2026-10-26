@@ -17,14 +17,14 @@ L'application est statique, sans serveur applicatif : publiez-la telle quelle (G
 
 1. Humidifier les électrodes de la ceinture et la porter ; fermer les autres applications connectées au H10 (Polar Beat, etc.).
 2. « Connecter le Polar H10 », choisir le capteur ; le tracé s'affiche en direct.
-3. Saisir le nom du patient, choisir la durée, « Enregistrer ».
-4. Le rapport s'affiche : « Sauvegarder », « Exporter PNG », « Exporter PDF ».
+3. Saisir le nom du patient et choisir la durée de la **mémoire tampon** (10 s à 5 min, ou sans limite) : dès la connexion, elle se remplit (barre de progression) puis garde en continu les dernières secondes reçues.
+4. « Enregistrer » sauvegarde le contenu de la mémoire tampon sur l'appareil **sans interrompre l'acquisition** : on peut enregistrer à nouveau à tout moment (par exemple à chaque symptôme). Le tracé s'affiche dans le rapport : « Exporter PNG », « Exporter PDF ».
 
 Sans capteur, « Mode démonstration » génère un ECG simulé pour tester l'application.
 
 ### Plein écran en paysage
 
-Le bouton ⛶ à droite de la fréquence cardiaque affiche le tracé en direct en plein écran, en paysage (aussi chez le spectateur). Le papier remplit l'écran à la même échelle (25 mm/s, 10 mm/mV, 10 s visibles) ; la fréquence cardiaque et la progression d'un enregistrement en cours restent affichées.
+Le bouton ⛶ à droite de la fréquence cardiaque affiche le tracé en direct en plein écran, en paysage (aussi chez le spectateur). Le papier remplit l'écran à la même échelle (25 mm/s, 10 mm/mV, 10 s visibles) ; la fréquence cardiaque et le remplissage de la mémoire tampon restent affichés.
 
 - **Android (Chrome, Edge) :** la page passe en plein écran et l'écran est verrouillé en paysage.
 - **iPhone :** Safari ne permet pas le plein écran d'une page ; le tracé occupe toute la fenêtre et, si le téléphone reste en portrait, il pivote de 90° (tourner le téléphone vers la gauche pour le lire).
@@ -43,10 +43,10 @@ Le bouton ⛶ à droite de la fréquence cardiaque affiche le tracé en direct e
 
 ### Veille, changement d'onglet, coupures
 
-- **Changement d'onglet / fenêtre en arrière-plan :** l'enregistrement continue (la réception Bluetooth ne dépend pas de l'affichage ; l'application garde en plus un verrou « Web Locks » pour que Chrome ne gèle pas l'onglet).
+- **Changement d'onglet / fenêtre en arrière-plan :** la mémoire tampon continue de se remplir (la réception Bluetooth ne dépend pas de l'affichage ; l'application garde en plus un verrou « Web Locks » pour que Chrome ne gèle pas l'onglet).
 - **Veille de l'écran :** tant qu'un capteur est connecté ou qu'un partage est actif, l'application demande à garder l'écran allumé (case « Garder l'écran allumé »). Attention : si l'écran est **verrouillé** (bouton d'alimentation) ou si le navigateur est fermé / mis en arrière-plan sur téléphone, Android peut suspendre la page et le navigateur ne garantit rien. Posez le téléphone écran allumé, branché si possible.
-- **Perte de liaison** (éloignement, parasite) : reconnexion automatique pendant ~1 minute ; l'enregistrement continue et la coupure apparaît en ligne plate sur le tracé.
-- **Page fermée ou tuée pendant un enregistrement :** une copie est enregistrée toutes les 10 s ; à la réouverture le tracé est récupéré et ajouté aux tracés sauvegardés.
+- **Perte de liaison** (éloignement, parasite) : reconnexion automatique pendant ~1 minute ; la mémoire tampon continue et la coupure apparaît en ligne plate sur le tracé. Si le capteur ne revient pas, la mémoire tampon reste disponible : « Enregistrer » la sauvegarde encore.
+- **Page fermée ou tuée capteur connecté :** la mémoire tampon est copiée toutes les 10 s ; à la réouverture elle s'affiche dans le rapport (« Sauvegarder » pour la conserver).
 
 ### Impression à l'échelle 1:1
 

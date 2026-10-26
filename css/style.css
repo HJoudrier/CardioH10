@@ -40,8 +40,6 @@ body {
 .status #statusText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #b9b4af; flex: none; }
 .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(30, 142, 90, .2); }
-.dot.rec { background: var(--accent); animation: pulse 1s infinite; }
-@keyframes pulse { 50% { opacity: .35; } }
 .chip { background: #eee9e4; color: var(--ink); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
 
 main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
@@ -89,7 +87,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 button.primary:hover:not(:disabled) { background: #a93226; }
 button.rec { background: #fff; border-color: var(--accent); color: var(--accent); font-weight: 600; }
-button.rec.active { background: var(--accent); color: #fff; }
 button.ghost, .btn.ghost { background: transparent; }
 button.small { padding: 5px 10px; min-height: 32px; font-size: 13px; }
 button.danger { color: #a93226; }
