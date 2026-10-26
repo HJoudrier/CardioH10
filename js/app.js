@@ -604,8 +604,7 @@
       else if (v.sensor !== 'ok') hint = 'Alertes activées, en pause : aucune alerte tant que le capteur n\'est pas connecté.';
       else hint = 'Surveillance active : alerte si la FC reste en dessous de ' + v.cfg.min + ' ou au-dessus de ' + v.cfg.max + ' bpm plus de ' + Alerts.HOLD_MS / 1000 + ' s. Gardez cette page ouverte.';
       if (v.cfg.enabled && v.cfg.notif && v.permission === 'denied') { hint += ' Notifications refusées par le navigateur : seules la sonnerie et l\'affichage fonctionneront.'; }
-      if (v.cfg.enabled && !v.audioReady && !v.ringing) { hint += ' Touchez l\'écran une fois pour activer la surveillance en arrière-plan et le son.'; }
-      else if (v.cfg.enabled) { hint += ' Les alertes continuent écran verrouillé ou page en arrière-plan : laissez la lecture audio (inaudible) active, ne la mettez pas en pause.'; }
+      if (v.cfg.enabled && v.cfg.sound && !v.audioReady && !v.ringing) { hint += ' Touchez l\'écran une fois pour activer le son.'; }
       $('alertHint').textContent = hint;
       $('alertHint').classList.toggle('err', err);
 
