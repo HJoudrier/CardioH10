@@ -29,9 +29,34 @@
       </div>
 
       <div class="viewer-bar" id="viewerBar" hidden>
+        <span class="sensor-state" id="sensorState"><span class="dot" id="sensorDot"></span><span id="sensorText">Connexion au poste distant…</span></span>
         <span id="viewerInfo"></span>
       </div>
+      <div class="alarm-banner viewer-only" id="alarmBanner" role="alert" hidden>
+        <span id="alarmText"></span>
+        <button id="btnAck" class="primary">Acquitter</button>
+      </div>
       <div class="canvas-wrap"><canvas id="liveCanvas" aria-label="Tracé ECG en direct"></canvas></div>
+      <div class="alert-panel viewer-only" id="alertPanel">
+        <div class="alert-head">
+          <strong>Alertes de fréquence cardiaque</strong>
+          <label class="check"><input id="alertOn" type="checkbox"><span>Activer</span></label>
+        </div>
+        <div class="alert-fields">
+          <label class="field">
+            <span>FC min (bpm)</span>
+            <input id="alertMin" type="number" inputmode="numeric" min="20" max="250" step="1">
+          </label>
+          <label class="field">
+            <span>FC max (bpm)</span>
+            <input id="alertMax" type="number" inputmode="numeric" min="20" max="250" step="1">
+          </label>
+          <label class="check"><input id="alertSound" type="checkbox"><span>Sonnerie</span></label>
+          <label class="check"><input id="alertNotif" type="checkbox"><span>Notification</span></label>
+          <button id="btnAlertTest" type="button">Tester</button>
+        </div>
+        <p class="hint" id="alertHint"></p>
+      </div>
       <p class="hint owner-only" id="btWarn" hidden>Web Bluetooth n'est pas disponible dans ce navigateur. Utilisez Chrome ou Edge (ordinateur ou Android) en HTTPS ou sur localhost. Le mode démonstration reste utilisable.</p>
 
       <div class="hint help owner-only" id="btHelp" hidden>
@@ -155,6 +180,7 @@
   <script src="js/polar.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/share.js"></script>
+  <script src="js/alerts.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

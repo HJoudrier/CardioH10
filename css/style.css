@@ -151,6 +151,31 @@ button.danger { color: #a93226; }
 .share-body .row { margin-top: 6px; }
 .viewer-bar { margin-bottom: 10px; font-weight: 600; min-height: 1.4em; }
 body.viewer .owner-only { display: none !important; }
+body:not(.viewer) .viewer-only { display: none !important; }
+
+.viewer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.sensor-state { display: inline-flex; align-items: center; gap: 8px; padding: 3px 12px; border-radius: 999px; background: #eee9e4; }
+.sensor-state.ok { background: #e3f4ea; color: #146c43; }
+.sensor-state.bad { background: #fdf2f0; color: #a93226; }
+.sensor-state.warn { background: #fdf3e0; color: #8a5a00; }
+
+.hr-big.alarm span { color: #fff; background: var(--accent); border-radius: 8px; padding: 2px 10px; animation: pulse 1s infinite; }
+
+.alarm-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 10px; padding: 12px 14px; border-radius: 8px;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 17px;
+}
+.alarm-banner.snoozed { background: #fdf3e0; color: #8a5a00; font-weight: 600; font-size: 14px; }
+.alarm-banner button { background: #fff; border-color: #fff; color: var(--accent); }
+.alarm-banner button:hover:not(:disabled) { background: #fdf2f0; }
+
+.alert-panel { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #faf8f6; }
+.alert-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.alert-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin-top: 8px; }
+.alert-fields .field input { width: 110px; }
+.alert-panel .hint { margin: 8px 0 0; }
+.alert-panel .hint.err { color: #a93226; }
 
 .empty { color: var(--muted); margin: 6px 0; }
 
@@ -200,5 +225,7 @@ body.viewer .owner-only { display: none !important; }
   main { padding: 10px; gap: 10px; }
   .card { padding: 12px; }
   .row button, .rec-panel button { flex: 1 1 100%; }
+  .alert-fields .field { flex: 1 1 40%; }
+  .alert-fields .field input { width: 100%; }
   .hr-big span { font-size: 28px; }
 }

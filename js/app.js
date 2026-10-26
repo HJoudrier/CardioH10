@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const { Analysis, Render, Pdf, Polar, Store, Share } = window.CardioH10;
+  const { Analysis, Render, Pdf, Polar, Store, Share, Alerts } = window.CardioH10;
   const $ = (id) => document.getElementById(id);
 
   const FS = Polar.ECG_FS;
@@ -20,6 +20,8 @@
     liveQueued: false,
     share: null,       // diffuseur de partage en direct
     viewer: null,      // spectateur (mode ?watch=)
+    monitor: null,     // alertes FC du spectateur
+    viewerWake: false, // spectateur : garder l'écran allumé (alertes actives)
     wake: null,
     lastDraft: 0,
     lock: null,
@@ -508,27 +510,108 @@
     $('liveTitle').textContent = 'Tracé en direct (spectateur)';
     $('viewerBar').hidden = false;
     $('footNote').hidden = true;
-    let live = false, name = '';
-    const info = () => {
-      $('viewerInfo').textContent = [name ? 'Patient : ' + name : '', live ? '' : 'en attente du capteur…']
-        .filter(Boolean).join(' · ');
-    };
+    let name = '';
+    const info = () => { $('viewerInfo').textContent = name ? 'Patient : ' + name : ''; };
+    initAlerts();
     S.viewer = new Share.Viewer({
       onStatus: (text, ok) => {
         setStatus(text, ok ? 'on' : '');
+        S.monitor.setLink(ok);
         if (!ok) { S.live = []; $('hrNow').textContent = '--'; queueLive(); }
       },
-      onHello: (m) => { live = !!m.live; name = String(m.name || '').slice(0, 80); S.live = []; info(); },
+      onHello: (m) => { name = String(m.name || '').slice(0, 80); S.live = []; info(); S.monitor.setLive(m.live); },
       onEcg: (samples) => handlers.onEcg(samples),
-      onHr: (m) => handlers.onHr(m),
+      onHr: (m) => { handlers.onHr(m); S.monitor.setHr(m.hr); },
       onState: (m) => {
-        live = !!m.live;
-        if (!live) { S.live = []; $('hrNow').textContent = '--'; queueLive(); }
-        info();
+        if (!m.live) { S.live = []; $('hrNow').textContent = '--'; queueLive(); }
+        S.monitor.setLive(m.live);
       },
       onInfo: (m) => { name = String(m.name || '').slice(0, 80); info(); },
     });
     S.viewer.connect(id);
+  }
+
+  /* ---------- Alertes de fréquence cardiaque (spectateur) ---------- */
+
+  const SENSOR_TEXT = {
+    ok: ['Capteur connecté', 'ok'],
+    off: ['Capteur non connecté', 'bad'],
+    stale: ['Capteur : signal perdu', 'bad'],
+    unknown: ['Poste distant injoignable : état du capteur inconnu', 'warn'],
+  };
+
+  function initAlerts() {
+    const baseTitle = document.title;
+    const mon = new Alerts.Monitor({ onUpdate: renderAlerts });
+    S.monitor = mon;
+    const cfg = mon.cfg;
+    $('alertOn').checked = cfg.enabled;
+    $('alertMin').value = cfg.min;
+    $('alertMax').value = cfg.max;
+    $('alertSound').checked = cfg.sound;
+    $('alertNotif').checked = cfg.notif;
+
+    if (navigator.serviceWorker) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+    const read = () => mon.setConfig({
+      enabled: $('alertOn').checked,
+      min: parseInt($('alertMin').value, 10),
+      max: parseInt($('alertMax').value, 10),
+      sound: $('alertSound').checked,
+      notif: $('alertNotif').checked,
+    });
+    // le son et les notifications ne s'autorisent que depuis un geste de l'utilisateur
+    const allow = () => {
+      mon.siren.unlock();
+      if ($('alertNotif').checked && 'Notification' in window && Notification.permission === 'default') {
+        try { Notification.requestPermission().then(() => mon.eval()); } catch (e) { /* ignoré */ }
+      }
+    };
+    $('alertOn').onchange = () => { if ($('alertOn').checked) allow(); read(); };
+    $('alertNotif').onchange = () => { if ($('alertNotif').checked) allow(); read(); };
+    $('alertSound').onchange = () => { if ($('alertSound').checked) allow(); read(); };
+    $('alertMin').oninput = $('alertMax').oninput = read;
+    $('btnAlertTest').onclick = () => { allow(); mon.test(); };
+    $('btnAck').onclick = () => mon.ack();
+    // alertes déjà activées lors d'une visite précédente : le premier toucher débloque le son
+    document.addEventListener('pointerdown', () => { if (mon.cfg.enabled) mon.siren.unlock(); }, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') updateWake();
+    });
+
+    function renderAlerts(v) {
+      const [text, kind] = SENSOR_TEXT[v.sensor];
+      $('sensorText').textContent = text;
+      $('sensorState').className = 'sensor-state ' + kind;
+      $('sensorDot').className = 'dot' + (v.sensor === 'ok' ? ' on' : '');
+
+      const banner = $('alarmBanner');
+      banner.hidden = !(v.ringing || v.snoozed);
+      banner.classList.toggle('snoozed', !v.ringing);
+      $('btnAck').hidden = !v.ringing;
+      if (v.ringing || v.snoozed) {
+        const what = (v.breach === 'low' ? 'FC basse : ' : 'FC élevée : ') + v.hr + ' bpm';
+        $('alarmText').textContent = v.ringing
+          ? '⚠ ' + what + (!v.audioReady && v.cfg.sound ? ' (touchez l\'écran pour activer le son)' : '')
+          : 'Alarme acquittée (' + what + '), reprise dans ' + v.snoozeLeft + ' s si la FC reste hors limites.';
+      }
+      $('hrNow').parentElement.classList.toggle('alarm', v.ringing);
+      document.title = v.ringing ? '⚠ ' + v.hr + ' bpm · ' + baseTitle : baseTitle;
+
+      let hint = '', err = false;
+      if (v.error) { hint = v.error; err = true; }
+      else if (!v.cfg.enabled) hint = 'Alertes désactivées. Réglez les limites puis activez-les : une sonnerie et une notification se déclenchent si la FC sort de ces limites.';
+      else if (v.sensor !== 'ok') hint = 'Alertes activées, en pause : aucune alerte tant que le capteur n\'est pas connecté.';
+      else hint = 'Surveillance active : alerte si la FC reste en dessous de ' + v.cfg.min + ' ou au-dessus de ' + v.cfg.max + ' bpm plus de ' + Alerts.HOLD_MS / 1000 + ' s. Gardez cette page ouverte.';
+      if (v.cfg.enabled && v.cfg.notif && v.permission === 'denied') { hint += ' Notifications refusées par le navigateur : seules la sonnerie et l\'affichage fonctionneront.'; }
+      if (v.cfg.enabled && v.cfg.sound && !v.audioReady && !v.ringing) { hint += ' Touchez l\'écran une fois pour activer le son.'; }
+      $('alertHint').textContent = hint;
+      $('alertHint').classList.toggle('err', err);
+
+      const wake = v.cfg.enabled && !v.error;
+      if (wake !== S.viewerWake) { S.viewerWake = wake; updateWake(); }
+    }
+    mon.eval();
   }
 
 
@@ -540,7 +623,7 @@
    */
   function updateLock() {
     if (!navigator.locks) return;
-    const want = !!(S.src || S.share);
+    const want = !!(S.src || S.share || S.viewerWake);
     if (want && !S.lock) {
       const me = (S.lock = {});
       navigator.locks.request('cardioh10-live', () => new Promise((res) => {
@@ -556,7 +639,7 @@
   /** Garde l'écran allumé tant qu'un capteur est connecté ou qu'un partage est actif. */
   async function updateWake() {
     updateLock();
-    const want = !!(S.src || S.share) && $('keepAwake').checked;
+    const want = !!(S.src || S.share || S.viewerWake) && (!!S.viewer || $('keepAwake').checked);
     try {
       if (want && !S.wake && navigator.wakeLock && document.visibilityState === 'visible') {
         S.wake = await navigator.wakeLock.request('screen');

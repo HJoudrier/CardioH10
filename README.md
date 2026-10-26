@@ -33,6 +33,14 @@ Sans capteur, « Mode démonstration » génère un ECG simulé pour tester l'ap
 - Gardez la page du capteur ouverte et au premier plan pendant le partage.
 - Sur certains réseaux (pare-feu d'entreprise, NAT strict), la connexion directe peut être impossible : il faudrait alors ajouter un serveur TURN. Les options PeerJS (serveur de mise en relation, TURN) se règlent avec `window.CARDIOH10_PEER`, à définir avant `js/share.js`.
 
+### Alertes FC min / FC max (côté spectateur)
+
+Sur la page ouverte par le lien de partage, le panneau « Alertes de fréquence cardiaque » permet de fixer **FC min** et **FC max**, puis de cocher « Activer ». Si la FC reste hors de ces limites plus de 3 s : **sonnerie**, **notification** (cliquable) et vibration, bandeau rouge et FC en rouge. « Acquitter » coupe la sonnerie 1 min ; elle reprend si la FC est toujours hors limites. Le bouton « Tester » vérifie le son et les notifications. Les réglages sont mémorisés sur l'appareil du spectateur.
+
+- **État du capteur** toujours affiché : « Capteur connecté », « Capteur non connecté » (ceinture déconnectée ou perte Bluetooth), « Signal perdu » (plus de mesure depuis 10 s) ou « Poste distant injoignable » (état inconnu).
+- **Aucune alerte si le capteur n'est pas connecté** : l'alarme est suspendue et coupée tant que le capteur n'est pas de nouveau connecté et que les mesures reprennent.
+- Autorisez les notifications et touchez l'écran une fois (les navigateurs interdisent le son sans geste). Gardez la page ouverte : l'écran est maintenu allumé tant que les alertes sont actives. Un navigateur fermé ou un téléphone verrouillé ne peut pas sonner : ce n'est pas un dispositif d'alarme médical.
+
 ### Veille, changement d'onglet, coupures
 
 - **Changement d'onglet / fenêtre en arrière-plan :** l'enregistrement continue (la réception Bluetooth ne dépend pas de l'affichage ; l'application garde en plus un verrou « Web Locks » pour que Chrome ne gèle pas l'onglet).
