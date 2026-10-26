@@ -36,55 +36,130 @@
     return '';
   }
 
-  /* ---------- Sonnerie ---------- */
+  /* ---------- Sonnerie et maintien en arrière-plan ----------
+   *
+   * Une page web est gelée par le navigateur quand l'écran se verrouille ou que l'onglet passe en
+   * arrière-plan, sauf si elle lit un média. Tant que les alertes sont actives, un élément <audio>
+   * lit donc en boucle un signal inaudible (mode « veille ») ; en cas d'alarme, il bascule sur la
+   * sonnerie. Un seul élément, démarré par un geste de l'utilisateur, évite le blocage d'autoplay
+   * quand l'alarme se déclenche plus tard, écran verrouillé.
+   */
+
+  const RATE = 8000;
+
+  function wavUrl(samples) {
+    const n = samples.length;
+    const buf = new ArrayBuffer(44 + n * 2);
+    const dv = new DataView(buf);
+    const str = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+    str(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, RATE, true); dv.setUint32(28, RATE * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    str(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(samples[i] * 32767), true);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+
+  /** Veille : sinusoïde de 20 Hz à très faible niveau (inaudible, mais pas un silence numérique). */
+  function quietSamples() {
+    const a = new Float32Array(RATE * 2);
+    for (let i = 0; i < a.length; i++) a[i] = 0.02 * Math.sin(2 * Math.PI * 20 * i / RATE);
+    return a;
+  }
+
+  /** Sonnerie : trois bips à 988 Hz puis un silence, 1,5 s en boucle. */
+  function alarmSamples() {
+    const a = new Float32Array(Math.round(RATE * 1.5));
+    for (let k = 0; k < 3; k++) {
+      const t0 = Math.round(k * 0.25 * RATE);
+      const len = Math.round(0.2 * RATE);
+      for (let i = 0; i < len; i++) {
+        const env = Math.min(1, i / (0.01 * RATE), (len - i) / (0.01 * RATE));
+        a[t0 + i] = 0.8 * env * (Math.sin(2 * Math.PI * 988 * i / RATE) > 0 ? 1 : -1);
+      }
+    }
+    return a;
+  }
 
   class Siren {
-    constructor() { this.ctx = null; this.timer = null; }
+    /** @param onPauseAction appelé si l'utilisateur appuie sur « pause » dans les commandes média */
+    constructor(onPauseAction) {
+      this.onPauseAction = onPauseAction;
+      this.el = null;
+      this.urls = null;
+      this.mode = 'off';      // 'off' | 'quiet' | 'alarm'
+      this.alarmOn = false;
+      this.testTimer = null;
+    }
 
-    /** À appeler depuis un geste de l'utilisateur : les navigateurs interdisent le son sinon. */
-    unlock() {
+    _init() {
+      if (this.el) return true;
       try {
-        if (!this.ctx) {
-          const AC = global.AudioContext || global.webkitAudioContext;
-          if (!AC) return false;
-          this.ctx = new AC();
+        this.urls = { quiet: wavUrl(quietSamples()), alarm: wavUrl(alarmSamples()) };
+        const a = new Audio();
+        a.loop = true;
+        a.preload = 'auto';
+        a.setAttribute('playsinline', '');
+        this.el = a;
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new global.MediaMetadata({ title: 'Surveillance de la fréquence cardiaque', artist: 'CardioH10' });
+          navigator.mediaSession.setActionHandler('pause', () => { if (this.onPauseAction) this.onPauseAction(); this.resume(); });
         }
-        if (this.ctx.state !== 'running') this.ctx.resume();
         return true;
       } catch (e) { return false; }
     }
 
-    get ready() { return !!this.ctx && this.ctx.state === 'running'; }
+    _play(mode) {
+      if (!this.el) return;
+      if (this.mode !== mode) { this.mode = mode; this.el.src = this.urls[mode]; }
+      try {
+        const p = this.el.play();
+        if (p && p.catch) p.catch(() => { /* bloqué : se relancera au prochain geste */ });
+      } catch (e) { /* ignoré */ }
+    }
 
+    /** À appeler depuis un geste de l'utilisateur : démarre le mode veille (page maintenue en vie). */
+    unlock() {
+      if (!this._init()) return false;
+      if (this.mode === 'off') this._play('quiet');
+      else if (this.el.paused) this._play(this.mode);
+      return true;
+    }
+
+    /** Arrête tout (alertes désactivées). */
+    release() {
+      clearTimeout(this.testTimer);
+      this.alarmOn = false;
+      if (!this.el) return;
+      this.el.pause();
+      this.mode = 'off';
+      try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = null; } catch (e) { /* ignoré */ }
+    }
+
+    /** Relance la lecture si le système l'a interrompue (appel téléphonique, etc.). */
+    resume() {
+      if (this.el && this.mode !== 'off' && this.el.paused) this._play(this.mode);
+    }
+
+    get ready() { return !!this.el && this.mode !== 'off' && !this.el.paused; }
+
+    /** Sonnerie brève d'essai. */
     beep() {
-      const c = this.ctx;
-      if (!c || c.state !== 'running') return;
-      const t = c.currentTime;
-      for (let i = 0; i < 3; i++) {
-        const t0 = t + i * 0.25;
-        const o = c.createOscillator();
-        const g = c.createGain();
-        o.type = 'square';
-        o.frequency.value = 988;
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
-        o.connect(g);
-        g.connect(c.destination);
-        o.start(t0);
-        o.stop(t0 + 0.22);
-      }
+      if (!this.unlock()) return;
+      this._play('alarm');
+      clearTimeout(this.testTimer);
+      this.testTimer = setTimeout(() => { if (!this.alarmOn && this.mode === 'alarm') this._play('quiet'); }, 1600);
     }
 
     start() {
-      if (this.timer) return;
-      this.beep();
-      this.timer = setInterval(() => this.beep(), 1500);
+      if (!this._init()) return;
+      this.alarmOn = true;
+      this._play('alarm');
     }
 
     stop() {
-      clearInterval(this.timer);
-      this.timer = null;
+      this.alarmOn = false;
+      if (this.mode === 'alarm') this._play('quiet');
     }
   }
 
@@ -115,7 +190,7 @@
     constructor(o) {
       this.o = o;
       this.cfg = load();
-      this.siren = new Siren();
+      this.siren = new Siren(() => this.ack());
       this.link = false;      // lien avec le poste distant
       this.live = false;      // capteur connecté d'après le poste distant
       this.liveSince = 0;
@@ -152,6 +227,7 @@
     setConfig(patch) {
       this.cfg = Object.assign({}, this.cfg, patch);
       save(this.cfg);
+      if (!this.cfg.enabled) this.siren.release();
       this.eval();
     }
 
@@ -163,14 +239,16 @@
 
     /** Sonnerie + notification d'essai, pour vérifier que l'appareil est bien réglé. */
     test() {
-      this.siren.unlock();
       this.siren.beep();
+      // alertes désactivées : l'essai ne doit pas laisser la lecture de veille en route
+      if (!this.cfg.enabled) setTimeout(() => { if (!this.cfg.enabled) this.siren.release(); }, 1800);
       notify('Test d\'alerte CardioH10', 'Les alertes de fréquence cardiaque s\'afficheront ainsi.');
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
     }
 
     eval() {
       const now = Date.now();
+      if (this.cfg.enabled) this.siren.resume();
       const cfg = this.cfg;
       let sensor;
       if (!this.link) sensor = 'unknown';
