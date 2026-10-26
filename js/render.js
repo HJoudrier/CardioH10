@@ -18,7 +18,7 @@
 
   const COL = {
     paper: '#fff7f7', minor: '#f2bcbc', major: '#e48a8a',
-    ink: '#111111', grey: '#666666', rule: '#999999', recall: '#8c8c8c',
+    ink: '#111111', grey: '#666666', rule: '#999999', recall: '#adadad',
   };
   const FONT = 'Helvetica, Arial, "Liberation Sans", sans-serif';
   const PT = 25.4 / 72; // 1 pt en mm
