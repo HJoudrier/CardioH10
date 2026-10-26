@@ -170,6 +170,10 @@ body.viewer .owner-only { display: none !important; }
 .saved .actions { display: flex; gap: 6px; }
 
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 16px 28px; }
+.foot p { margin: 0; }
+.foot p + p { margin-top: 6px; }
+.foot a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.foot a:hover, .foot a:focus-visible { text-decoration: underline; }
 
 #toast {
   position: fixed;
