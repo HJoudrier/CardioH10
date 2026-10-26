@@ -167,7 +167,7 @@
     $('btnConnect').disabled = false;
     $('btnDemo').disabled = false;
     $('btnDisconnect').hidden = !on;
-    $('btnRec').disabled = !S.buf;
+    $('btnRec').disabled = $('btnRecFs').disabled = !S.buf;
   }
 
   /* ---------- Tracé en direct ---------- */
@@ -252,6 +252,8 @@
   function setFullUi() {
     $('liveCard').classList.toggle('fs', S.full);
     document.body.classList.toggle('fs-open', S.full);
+    // les messages suivent le bloc (et son pivotement éventuel)
+    (S.full ? $('liveCard') : document.body).appendChild($('toast'));
     const label = S.full ? 'Quitter le plein écran' : 'Plein écran (paysage)';
     $('btnFull').setAttribute('aria-label', label);
     $('btnFull').title = label;
@@ -718,6 +720,7 @@
     $('btnDemo').onclick = () => startSource('demo');
     $('btnDisconnect').onclick = stopSource;
     $('btnRec').onclick = saveBuffer;
+    $('btnRecFs').onclick = saveBuffer;
     $('duration').onchange = () => { trimBuffer(); updateProgress(); };
     $('keepAwake').onchange = updateWake;
     document.addEventListener('visibilitychange', () => {
