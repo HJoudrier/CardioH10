@@ -2,7 +2,7 @@
 
 Application web (HTML / CSS / JavaScript, sans dépendance ni build) pour enregistrer un ECG avec une ceinture **Polar H10** en Bluetooth et produire un tracé au format cardiologique :
 
-- papier millimétré (1 mm / 5 mm), **25 mm/s**, **10 mm/mV**, impulsion d'étalonnage 1 mV ;
+- papier millimétré (1 mm / 5 mm), **25 mm/s**, **10 mm/mV**, impulsion d'étalonnage 1 mV sur la première ligne de chaque page ; au début des lignes suivantes, rappel en grisé de la dernière seconde de la ligne du dessus pour lire la continuité du tracé ;
 - en-tête : nom, date, durée, FC moyenne / min / max, HRV (RMSSD et SDNN) ;
 - pied de page : date et heure de l'enregistrement ;
 - export **PNG** (A4 paysage, 300 dpi, résolution incluse dans le fichier) et **PDF** vectoriel A4 paysage, imprimable à l'échelle 1:1 (10 s par ligne, 3 lignes = 30 s par page, pages supplémentaires au-delà) ;

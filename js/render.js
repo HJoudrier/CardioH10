@@ -10,7 +10,7 @@
     pageW: 297, pageH: 210,   // A4 paysage
     gridX: 11, gridW: 275,    // 55 grands carreaux
     gridY: 42, rowH: 50, rows: 3,
-    calW: 25,                 // zone d'étalonnage au début de chaque ligne
+    calW: 25,                 // début de ligne : étalonnage (1re ligne) ou rappel de la ligne précédente
     rowSec: 10,               // 10 s par ligne -> 30 s par page
     baseY: 30,                // ligne de base dans une rangée (mm depuis le haut)
   };
@@ -18,7 +18,7 @@
 
   const COL = {
     paper: '#fff7f7', minor: '#f2bcbc', major: '#e48a8a',
-    ink: '#111111', grey: '#666666', rule: '#999999',
+    ink: '#111111', grey: '#666666', rule: '#999999', recall: '#8c8c8c',
   };
   const FONT = 'Helvetica, Arial, "Liberation Sans", sans-serif';
   const PT = 25.4 / 72; // 1 pt en mm
@@ -100,14 +100,14 @@
     g.text('1 mV', x + 2, yb + 4.5, { size: 5, color: COL.grey });
   }
 
-  function drawTrace(g, sig, i0, i1, xFn, yb, yMin, yMax) {
+  function drawTrace(g, sig, i0, i1, xFn, yb, yMin, yMax, color) {
     const pts = [];
     for (let i = i0; i <= i1; i++) {
       let y = yb - sig[i] * MM_PER_UV;
       if (y < yMin) y = yMin; else if (y > yMax) y = yMax;
       pts.push(xFn(i), y);
     }
-    g.path(pts, { color: COL.ink, width: 0.3 });
+    g.path(pts, { color: color || COL.ink, width: 0.3 });
   }
 
   function fmtClock(sec) {
@@ -184,8 +184,13 @@
       const y0 = L.gridY + r * L.rowH;
       const yb = y0 + L.baseY;
       const x0 = L.gridX + L.calW;
+      const xFn = (i) => x0 + (i / fs - tStart) * SPEED;
+      const yMin = y0 + 0.5, yMax = y0 + L.rowH - 0.5;
 
-      drawCal(g, L.gridX, yb);
+      // 1re ligne : impulsion d'étalonnage. Lignes suivantes : rappel grisé de la fin de la
+      // ligne du dessus (la dernière seconde, sur le même axe de temps, raccordée au tracé).
+      if (r === 0) drawCal(g, L.gridX, yb);
+      else drawTrace(g, view.sig, Math.max(0, i0 - Math.round((L.calW / SPEED) * fs)), i0, xFn, yb, yMin, yMax, COL.recall);
 
       // repères de temps (1 s = 25 mm)
       const ticks = [];
@@ -196,7 +201,7 @@
       }
       g.lines(ticks, { color: COL.ink, width: 0.25 });
 
-      drawTrace(g, view.sig, i0, i1, (i) => x0 + (i / fs - tStart) * SPEED, yb, y0 + 0.5, y0 + L.rowH - 0.5);
+      drawTrace(g, view.sig, i0, i1, xFn, yb, yMin, yMax);
     }
 
     // Pied de page : date et heure de l'enregistrement
