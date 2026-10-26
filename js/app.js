@@ -23,6 +23,7 @@
     wake: null,
     lastDraft: 0,
     lock: null,
+    full: false,       // tracé en direct en plein écran
   };
 
   /* ---------- Utilitaires ---------- */
@@ -185,15 +186,82 @@
     requestAnimationFrame(drawLive);
   }
 
+  /** Plein écran : le canvas remplit son cadre, le papier garde au moins 10 s × 60 mm visibles. */
+  function sizeLiveFull(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const box = canvas.parentElement;
+    const bw = Math.max(1, box.clientWidth), bh = Math.max(1, box.clientHeight);
+    const k = Math.min(bw / Render.LIVE.w, bh / Render.LIVE.h); // px CSS par mm
+    const cw = Math.round(bw * dpr), ch = Math.round(bh * dpr);
+    if (canvas.width !== cw) canvas.width = cw;
+    if (canvas.height !== ch) canvas.height = ch;
+    canvas.style.height = '';
+    return { k: k * dpr, w: bw / k, h: bh / k };
+  }
+
   function drawLive() {
     S.liveQueued = false;
     const canvas = $('liveCanvas');
-    const aspect = Render.LIVE.w / Render.LIVE.h;
-    const cw = sizeCanvas(canvas, aspect);
-    const g = new Render.CanvasBackend(canvas, cw / Render.LIVE.w, { minPx: 0.7 });
+    let k, w = Render.LIVE.w, h = Render.LIVE.h;
+    if (S.full) ({ k, w, h } = sizeLiveFull(canvas));
+    else k = sizeCanvas(canvas, w / h) / w;
+    const g = new Render.CanvasBackend(canvas, k, { minPx: 0.7 });
     const win = S.live.slice(-Math.round(11 * FS));
     const sig = $('filterOn').checked ? Analysis.applyCausal(win, FS, FILTER) : Float32Array.from(win);
-    Render.drawLive(g, sig, FS);
+    Render.drawLive(g, sig, FS, w, h);
+  }
+
+  /* ---------- Plein écran (paysage) ---------- */
+
+  const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+
+  function leaveNativeFull() {
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) { /* ignoré */ }
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fsElement() && exit) Promise.resolve(exit.call(document)).catch(() => {});
+  }
+
+  /**
+   * Le bloc du tracé couvre la fenêtre (CSS) ; la page passe aussi en plein écran natif et
+   * l'écran est verrouillé en paysage quand le navigateur le permet (Android). Sinon (iPhone…),
+   * si l'écran reste en portrait, le CSS fait pivoter le bloc de 90°.
+   */
+  async function enterFull() {
+    if (S.full) return;
+    S.full = true;
+    setFullUi();
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    try {
+      if (req && !fsElement()) await req.call(el, { navigationUI: 'hide' });
+      if (!S.full) { leaveNativeFull(); return; } // quitté pendant la demande
+      if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+    } catch (e) { /* refusé ou non pris en charge : le pivotement CSS prend le relais */ }
+  }
+
+  function exitFull() {
+    if (!S.full) return;
+    S.full = false;
+    setFullUi();
+    leaveNativeFull();
+  }
+
+  function setFullUi() {
+    $('liveCard').classList.toggle('fs', S.full);
+    document.body.classList.toggle('fs-open', S.full);
+    const label = S.full ? 'Quitter le plein écran' : 'Plein écran (paysage)';
+    $('btnFull').setAttribute('aria-label', label);
+    $('btnFull').title = label;
+    queueLive();
+  }
+
+  function initFull() {
+    $('btnFull').onclick = () => (S.full ? exitFull() : enterFull());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') exitFull(); });
+    // sortie du plein écran natif par le navigateur (Échap, geste retour)
+    const onChange = () => { if (!fsElement()) exitFull(); };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
   }
 
   /* ---------- Enregistrement ---------- */
@@ -598,6 +666,7 @@
   /* ---------- Initialisation ---------- */
 
   function init() {
+    initFull();
     const watch = new URLSearchParams(location.search).get('watch');
     if (watch !== null) {
       if (!Share.ID_RE.test(watch)) {

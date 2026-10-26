@@ -22,6 +22,14 @@ L'application est statique, sans serveur applicatif : publiez-la telle quelle (G
 
 Sans capteur, « Mode démonstration » génère un ECG simulé pour tester l'application.
 
+### Plein écran en paysage
+
+Le bouton ⛶ à droite de la fréquence cardiaque affiche le tracé en direct en plein écran, en paysage (aussi chez le spectateur). Le papier remplit l'écran à la même échelle (25 mm/s, 10 mm/mV, 10 s visibles) ; la fréquence cardiaque et la progression d'un enregistrement en cours restent affichées.
+
+- **Android (Chrome, Edge) :** la page passe en plein écran et l'écran est verrouillé en paysage.
+- **iPhone :** Safari ne permet pas le plein écran d'une page ; le tracé occupe toute la fenêtre et, si le téléphone reste en portrait, il pivote de 90° (tourner le téléphone vers la gauche pour le lire).
+- Pour quitter : le même bouton, la touche Échap ou, sur Android, le geste retour.
+
 ### Partager le tracé en direct (QR code)
 
 « Partager en direct (QR code) » affiche un lien et un QR code. La personne qui l'ouvre voit le tracé et la fréquence cardiaque en direct dans son navigateur, sans rien installer (page en lecture seule : pas d'enregistrement ni d'export).

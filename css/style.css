@@ -59,6 +59,11 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16p
 .hr-big { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
 .hr-big span { font-size: 34px; font-weight: 700; color: var(--accent); line-height: 1; }
 .hr-big small { color: var(--muted); }
+.head-tools { display: flex; align-items: center; gap: 12px; }
+button.icon { padding: 0; width: 40px; flex: none; }
+button.icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+button.icon .i-close, .live.fs button.icon .i-open { display: none; }
+.live.fs button.icon .i-close { display: block; }
 
 .canvas-wrap { width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff7f7; }
 .canvas-wrap canvas { display: block; width: 100%; }
@@ -152,6 +157,41 @@ button.danger { color: #a93226; }
 .viewer-bar { margin-bottom: 10px; font-weight: 600; min-height: 1.4em; }
 body.viewer .owner-only { display: none !important; }
 
+/* Plein écran du tracé en direct : le bloc couvre la fenêtre, seuls l'en-tête, le tracé
+   et la progression d'enregistrement restent visibles. */
+body.fs-open { overflow: hidden; }
+.live.fs {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.live.fs > :not(.card-head):not(.viewer-bar):not(.canvas-wrap):not(.progress) { display: none !important; }
+.live.fs .card-head, .live.fs .viewer-bar { flex: none; margin-bottom: 6px; }
+.live.fs .canvas-wrap { flex: 1 1 0; min-height: 0; position: relative; }
+.live.fs .canvas-wrap canvas { position: absolute; inset: 0; height: 100%; }
+.live.fs .progress { flex: none; margin-top: 6px; }
+/* Écran resté en portrait (verrouillage paysage impossible, ex. iPhone) : pivot de 90°. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .live.fs {
+    right: auto;
+    bottom: auto;
+    width: 100vh;
+    height: 100vw;
+    width: 100dvh;
+    height: 100dvw;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(-100%);
+  }
+}
+
 .empty { color: var(--muted); margin: 6px 0; }
 
 .saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -189,7 +229,7 @@ body.viewer .owner-only { display: none !important; }
   opacity: 0;
   pointer-events: none;
   transition: opacity .2s, transform .2s;
-  z-index: 10;
+  z-index: 30;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.err { background: #a93226; }

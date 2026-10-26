@@ -214,16 +214,20 @@
 
   /* ---------- Bandeau en direct (10 s défilantes) ---------- */
 
-  const LIVE = { w: L.gridW, h: 60, baseY: 30 };
+  const LIVE = { w: L.gridW, h: 60 };
 
-  function drawLive(g, sig, fs) {
-    drawGrid(g, 0, 0, LIVE.w, LIVE.h);
-    drawCal(g, 0, LIVE.baseY);
+  /** w × h en mm : 10 s × 60 mm par défaut, davantage en plein écran (même échelle). */
+  function drawLive(g, sig, fs, w, h) {
+    w = w || LIVE.w;
+    h = h || LIVE.h;
+    const yb = Math.round(h / 10) * 5; // ligne de base au milieu, sur un grand carreau
+    drawGrid(g, 0, 0, w, h);
+    drawCal(g, 0, yb);
     const len = sig.length;
     if (len < 2) return;
-    const span = Math.floor(((LIVE.w - L.calW) / SPEED) * fs);
+    const span = Math.floor(((w - L.calW) / SPEED) * fs);
     const i0 = Math.max(0, len - 1 - span);
-    drawTrace(g, sig, i0, len - 1, (i) => LIVE.w - ((len - 1 - i) / fs) * SPEED, LIVE.baseY, 0.5, LIVE.h - 0.5);
+    drawTrace(g, sig, i0, len - 1, (i) => w - ((len - 1 - i) / fs) * SPEED, yb, 0.5, h - 0.5);
   }
 
   const ns = (global.CardioH10 = global.CardioH10 || {});
