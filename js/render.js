@@ -161,7 +161,7 @@
     };
     const name = (rec.name || '').trim() || '—';
     field('Nom', fit(g, name, 13, true, 130), L.gridX, 20, true);
-    field('Date', dateShort(start), 150, 20);
+    field('Date et heure', dateShort(start) + ' à ' + timeLong(start), 150, 20);
     field('Durée', n / fs < 60 ? Math.round(n / fs) + ' s' : fmtClock(n / fs) + ' min', 215, 20);
 
     const int = (v, unit) => (v == null ? '—' : Math.round(v) + ' ' + unit);
